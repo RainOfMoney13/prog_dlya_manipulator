@@ -20,12 +20,16 @@ class Arm165App(QMainWindow):
         # Инициализация компонентов
         self.robot = RobotARM165()
         self.is_manual_mode = False
+        self.btn_pause.setEnabled(False)
+        self.btn_estop.setEnabled(False)
+        self.btn_back_to_start.setEnabled(False)
         
         # 1. Связываем сигналы
         self.connect_signals()
         
         # 2. Блокируем джойстики (ТЗ п.1.5)
         self.lock_manual_controls(True)
+        self.btn_manual.setEnabled(False)
         
         # 3. Настраиваем светофор
         self.update_leds('off')
@@ -84,27 +88,56 @@ class Arm165App(QMainWindow):
         self.slider_postition.setEnabled(state)
 
     def start_manual_mode(self):
-        """Обработчик кнопки Начало работы ручного режима"""
-        self.is_manual_mode = True
-        self.lock_manual_controls(False)
-        self.write_log("Робот в режиме ручного управления") # ТЗ п.8.3
-        self.update_leds('wait')
-
-    def toggle_system(self):
-        """Вкл/Выкл системы (ТЗ п.1.1)"""
-        if not self.robot.connected:
-            self.robot.connect()
-            self.btn_on.setText("Выкл.")
-            self.write_log("Робот включен") # ТЗ п.8.1
+        if not self.is_manual_mode:
+            # Включаем ручной режим
+            self.is_manual_mode = True
+            self.lock_manual_controls(False)
+            self.btn_manual.setText("Выйти из ручного режима")
+            self.write_log("Робот в режиме ручного управления")
             self.update_leds('wait')
         else:
+            # Выключаем ручной режим
+            self.is_manual_mode = False
+            self.lock_manual_controls(True)
+            self.btn_manual.setText("Начало работы ручного режима")
+            self.write_log("Выход из режима ручного управления")
+            self.update_leds('off')
+
+    def toggle_system(self):
+        if not self.robot.connected:
+            # ВКЛЮЧАЕМ СИСТЕМУ
+            self.robot.connect()
+            self.btn_on.setText("Выкл.")
+            self.write_log("Робот включен")
+            self.update_leds('wait')
+            
+            # РАЗБЛОКИРУЕМ кнопки управления
+            self.btn_manual.setEnabled(True)
+            self.btn_pause.setEnabled(True)
+            self.btn_estop.setEnabled(True)
+            self.btn_back_to_start.setEnabled(True)
+            
+        else:
+            # ВЫКЛЮЧАЕМ СИСТЕМУ
             self.robot.stop()
             self.robot.move_to_start()
+            self.robot.connected = False
             self.btn_on.setText("Вкл.")
-            self.is_manual_mode = False
+            
+            # Если были в ручном режиме - принудительно выходим из него
+            if self.is_manual_mode:
+                self.is_manual_mode = False
+                self.btn_manual.setText("Начало работы ручного режима")
+                
             self.lock_manual_controls(True)
             self.write_log("Робот выключен, возврат на старт")
             self.update_leds('off')
+            
+            # БЛОКИРУЕМ кнопки управления движением
+            self.btn_manual.setEnabled(False)
+            self.btn_pause.setEnabled(False)
+            self.btn_estop.setEnabled(False)
+            self.btn_back_to_start.setEnabled(False)
 
     def pause_system(self):
         """Пауза (ТЗ п.1.2)"""
@@ -204,15 +237,26 @@ class Arm165App(QMainWindow):
         scrollbar.setValue(scrollbar.maximum())
 
     def save_logs(self):
-        """Сохранение логов (ТЗ п.9)"""
-        path = self.lineEdit.text() # Ваш lineEdit
+        path = self.lineEdit.text().strip() 
+        
         if not path:
             QMessageBox.warning(self, "Ошибка", "Введите путь для сохранения логов!")
             return
+            
+        # Если пользователь забыл расширение, добавляем .txt
+        if not path.endswith('.txt'):
+            path += '.txt'
+            
         try:
-            with open(path, "w", encoding="utf-8") as f:
+            # ИЗМЕНЕНИЕ: Открываем файл в режиме 'a' (append - добавление).
+            # Если файл существует, новые логи допишутся в конец.
+            # Если файла нет, он создастся автоматически.
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(f"\n--- СЕССИЯ ОТ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n")
                 f.write(self.text_logs.toPlainText())
-            self.write_log(f"Логи сохранены: {path}")
+                f.write("\n")
+                
+            self.write_log(f"Логи сохранены/обновлены: {path}")
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить: {e}")
 
@@ -225,7 +269,6 @@ class Arm165App(QMainWindow):
             self.table_category.setItem(i, 2, QTableWidgetItem("--:--:--"))
 
     def add_stat(self, row_index):
-        """Добавление объекта в статистику (ТЗ п.10)"""
         item = self.table_category.item(row_index, 1)
         current_count = int(item.text()) if item else 0
         
@@ -239,7 +282,6 @@ class Arm165App(QMainWindow):
         self.write_log(f"В статистику добавлен: {cat_name}")
 
     def save_stats(self):
-        """Сохранение статистики в реальный формат .xlsx (ТЗ п.11)"""
         path = self.line_path_to_stats.text().strip()
         
         if not path:
@@ -250,28 +292,45 @@ class Arm165App(QMainWindow):
             path += '.xlsx'
             
         try:
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "Статистика сортировки"
+            # ИЗМЕНЕНИЕ: Проверяем, существует ли файл
+            if os.path.exists(path):
+                # Если существует — загружаем его, чтобы обновить данные
+                wb = openpyxl.load_workbook(path)
+                ws = wb.active
+                
+                # Очищаем старые данные (строки со 2-й по 5-ю), чтобы записать новые
+                for row in range(2, 6):
+                    for col in range(1, 4):
+                        ws.cell(row=row, column=col).value = None
+            else:
+                # Если файла нет — создаем новый
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "Статистика сортировки"
+                
+                headers = ["Категория", "Количество", "Время перемещения"]
+                ws.append(headers)
+                
+                for cell in ws[1]:
+                    cell.font = Font(bold=True)
+                    
+                ws.column_dimensions['A'].width = 15
+                ws.column_dimensions['B'].width = 15
+                ws.column_dimensions['C'].width = 25
             
-            headers = ["Категория", "Количество", "Время перемещения"]
-            ws.append(headers)
-            
-            for cell in ws[1]:
-                cell.font = Font(bold=True)
-            
+            # Записываем актуальные данные из таблицы (в обоих случаях)
             for row in range(4):
                 cat = self.table_category.item(row, 0).text()
                 count = self.table_category.item(row, 1).text()
                 time_str = self.table_category.item(row, 2).text()
-                ws.append([cat, int(count), time_str])
-            
-            ws.column_dimensions['A'].width = 15
-            ws.column_dimensions['B'].width = 15
-            ws.column_dimensions['C'].width = 25
+                
+                # Записываем начиная со 2-й строки (row+2)
+                ws.cell(row=row+2, column=1).value = cat
+                ws.cell(row=row+2, column=2).value = int(count)
+                ws.cell(row=row+2, column=3).value = time_str
             
             wb.save(path)
-            self.write_log(f"Статистика успешно сохранена в Excel: {path}")
+            self.write_log(f"Статистика сохранена (обновлена) в Excel: {path}")
             QMessageBox.information(self, "Успех", f"Данные сохранены в файл:\n{path}")
             
         except Exception as e:
