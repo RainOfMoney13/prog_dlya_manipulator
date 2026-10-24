@@ -1,193 +1,285 @@
 import sys
 import os
-import cv2
-import numpy as np
 from datetime import datetime
 from PyQt5 import uic
-from PyQt5.QtWidgets import *
-from PyQt5.QtWidgets import QScrollArea
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMessageBox
 from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtGui import QPixmap, QImage, QFont
+import openpyxl
+from openpyxl.styles import Font
 
 from config import UI_FILE
-from color_defect_detector import ColorDefectDetector
-from camera_module import CameraThread
 from robot_api_real import RobotARM165
 
-class Arm165App(QDialog):
+class Arm165App(QMainWindow):
     def __init__(self):
         super().__init__()
-        
-        # 1. Загрузка интерфейса
+        # Загружаем интерфейс
         uic.loadUi(UI_FILE, self)
-        self.setWindowTitle("ARM165 - Система управления")
+        self.setWindowTitle("ARM165 - Ручной режим (Модуль А)")
         
-        # 2. Инициализация компонентов
+        # Инициализация компонентов
         self.robot = RobotARM165()
-        self.detector = ColorDefectDetector()
-        self.camera_threads = []
-        self.camera_labels = {} # Храним ссылки на QLabel для камер
-        self.auto_list = []
+        self.is_manual_mode = False
         
-        # 3. Связывание сигналов (кнопок)
+        # 1. Связываем сигналы
         self.connect_signals()
         
-        # 4. Таймеры
-        self.ui_timer = QTimer()
-        self.ui_timer.timeout.connect(self.update_ui_status)
-        self.ui_timer.start(100) # 10 раз в секунду
-
-        # Запуск тестового лога
-        self.log("Система инициализирована")
+        # 2. Блокируем джойстики (ТЗ п.1.5)
+        self.lock_manual_controls(True)
         
+        # 3. Настраиваем светофор
+        self.update_leds('off')
         
+        # 4. Инициализируем таблицу статистики
+        self.init_stats_table()
+        
+        # 5. Таймер обновления телеметрии (ТЗ п.7)
+        self.telemetry_timer = QTimer()
+        self.telemetry_timer.timeout.connect(self.update_telemetry)
+        self.telemetry_timer.start(200) # 5 раз в секунду
+        
+        self.write_log("Система запущена")
 
     def connect_signals(self):
-        # --- Модуль А: Управление ---
-        self.btn_on.clicked.connect(self.system_on)
-        self.btn_stop.clicked.connect(self.system_stop)
-        self.btn_pause.clicked.connect(self.system_pause)
-        self.btn_start_pose.clicked.connect(self.move_to_start)
+        """Привязка ВСЕХ кнопок и элементов к функциям (строго по вашим именам)"""
+        # --- П.1 Кнопки управления ---
+        self.btn_on.clicked.connect(self.toggle_system)
+        self.btn_pause.clicked.connect(self.pause_system)
+        self.btn_estop.clicked.connect(self.emergency_stop)
+        self.btn_back_to_start.clicked.connect(self.move_to_start)
+        self.btn_manual.clicked.connect(self.start_manual_mode)
+
+        # --- П.2, П.3, П.4 Управление ---
+        self.combobox_move.currentIndexChanged.connect(self.change_move_style)
+        self.checkbox_gripper.stateChanged.connect(self.toggle_gripper)
+        self.checkbox_konveer.stateChanged.connect(self.toggle_conveyor)
         
-        self.btn_manual_cart.clicked.connect(lambda: self.robot.manual_cart_mode() if hasattr(self.robot, 'manual_cart_mode') else self.log("Ручной режим"))
-        self.btn_manual_joint.clicked.connect(lambda: self.robot.manual_joint_mode() if hasattr(self.robot, 'manual_joint_mode') else self.log("Ручной режим"))
-
-        # --- Камеры (3 шт) ---
-        # Кнопки btn_3motora и btn_6motorov используются для запуска камер
-        self.btn_3motora.clicked.connect(lambda: self.start_camera(0))
-        self.btn_6motorov.clicked.connect(lambda: self.start_camera(1))
-        # Для 3-й камеры можно использовать свободную кнопку (например, btn_add_point)
-        self.btn_add_point.clicked.connect(lambda: self.start_camera(2))
-
-        # --- Модуль Б: Автоматика ---
-        self.btn_run_session.clicked.connect(self.start_auto_sorting)
-        self.btn_clear_session.clicked.connect(self.clear_session_list)
-
-        # --- Логи ---
+        # --- П.5 Линейное звено ---
+        self.slider_skorost.valueChanged.connect(self.linear_speed_changed)
+        self.slider_postition.valueChanged.connect(self.linear_pos_changed)
+        
+        # --- П.9 Сохранение логов ---
         self.btn_save_logs.clicked.connect(self.save_logs)
+        
+        # --- П.10, П.11 Статистика ---
+        self.btn_plus_1.clicked.connect(lambda: self.add_stat(0)) # Объект А
+        self.btn_plus_2.clicked.connect(lambda: self.add_stat(1)) # Объект Б
+        self.btn_plus_3.clicked.connect(lambda: self.add_stat(2)) # Объект В
+        self.btn_plus_4.clicked.connect(lambda: self.add_stat(3)) # Брак
+        self.btn_stats.clicked.connect(self.save_stats)
 
-    # ================= ЛОГИКА РОБОТА =================
-    def system_on(self):
-        self.robot.connect()
-        self.btn_on.setText("Выкл.")
-        self.log("Робот включен")
+    # ================= ЛОГИКА УПРАВЛЕНИЯ =================
+    
+    def lock_manual_controls(self, lock):
+        """Блокирует/разблокирует джойстики (ТЗ п.1.5)"""
+        state = not lock
+        self.combobox_move.setEnabled(state)
+        self.slider_1.setEnabled(state)
+        self.slider_2.setEnabled(state)
+        self.slider_3.setEnabled(state)
+        self.slider_4.setEnabled(state)
+        self.slider_5.setEnabled(state)
+        self.slider_6.setEnabled(state)
+        self.slider_skorost.setEnabled(state)
+        self.slider_postition.setEnabled(state)
 
-    def system_stop(self):
-        # ВСТАВИТЬ API РОБОТА: self.robot.stop()
-        self.log("Экстренная остановка!")
-        self.btn_on.setText("Вкл.")
+    def start_manual_mode(self):
+        """Обработчик кнопки Начало работы ручного режима"""
+        self.is_manual_mode = True
+        self.lock_manual_controls(False)
+        self.write_log("Робот в режиме ручного управления") # ТЗ п.8.3
+        self.update_leds('wait')
 
-    def system_pause(self):
-        # ВСТАВИТЬ API РОБОТА: self.robot.pause()
-        self.log("Пауза")
+    def toggle_system(self):
+        """Вкл/Выкл системы (ТЗ п.1.1)"""
+        if not self.robot.connected:
+            self.robot.connect()
+            self.btn_on.setText("Выкл.")
+            self.write_log("Робот включен") # ТЗ п.8.1
+            self.update_leds('wait')
+        else:
+            self.robot.stop()
+            self.robot.move_to_start()
+            self.btn_on.setText("Вкл.")
+            self.is_manual_mode = False
+            self.lock_manual_controls(True)
+            self.write_log("Робот выключен, возврат на старт")
+            self.update_leds('off')
+
+    def pause_system(self):
+        """Пауза (ТЗ п.1.2)"""
+        self.robot.pause()
+        self.write_log("Пауза") # ТЗ п.8.6
+        self.update_leds('pause')
+
+    def emergency_stop(self):
+        """Экстренное торможение (ТЗ п.1.3)"""
+        self.robot.stop()
+        # При аварии конвейер тоже останавливается (ТЗ п.4)
+        if self.checkbox_konveer.isChecked():
+            self.checkbox_konveer.setChecked(False)
+        self.write_log("АВАРИЙНАЯ ОСТАНОВКА СИСТЕМЫ") # ТЗ п.8.5
+        self.update_leds('estop')
 
     def move_to_start(self):
-        # ВСТАВИТЬ API РОБОТА: self.robot.moveToStart()
-        self.log("Робот едет на стартовую позицию")
+        """Возврат на старт (ТЗ п.1.4)"""
+        self.robot.move_to_start()
+        self.write_log("Робот на стартовой позиции") # ТЗ п.8.2
+        self.update_leds('wait')
 
-    # ================= КАМЕРЫ =================
-    def start_camera(self, cam_id):
-        if cam_id in self.camera_labels:
-            self.log(f"Камера {cam_id+1} уже запущена")
-            return
+    # ================= ПЕРЕКЛЮЧАТЕЛИ =================
 
-        thread = CameraThread(cam_id, process_vision=True)
-        thread.frame_signal.connect(self.display_camera_frame)
-        thread.start()
-        self.camera_threads.append(thread)
-        self.log(f"Камера {cam_id+1} запущена")
+    def change_move_style(self, index):
+        """Переключение Move L / Move J (ТЗ п.2)"""
+        style = self.combobox_move.currentText()
+        self.write_log(f"Режим управления: {style}")
+        self.label.setText(f"Управление манипулятором ({'MoveL' if index == 0 else 'MoveJ'})")
 
-    def display_camera_frame(self, cam_id, frame, defects):
-        # Определяем, в какой QFrame выводить
-        if cam_id == 0: container = self.camera1
-        elif cam_id == 1: container = self.camera2
-        else: container = self.camera3
+    def toggle_gripper(self, state):
+        """Схват (ТЗ п.3)"""
+        is_closed = (state == Qt.Checked)
+        self.robot.toggle_gripper(is_closed)
+        # Меняем подпись (0 - открыть / 1 - закрыть)
+        self.label_2.setText("Закрыт (1)" if is_closed else "Открыт (0)")
+        self.write_log(f"Схват: {'Закрыт' if is_closed else 'Открыт'}")
 
-        # Создаем QLabel внутри QFrame один раз
-        if cam_id not in self.camera_labels:
-            layout = QVBoxLayout(container)
-            layout.setContentsMargins(0,0,0,0)
-            label = QLabel()
-            label.setAlignment(Qt.AlignCenter)
-            label.setScaledContents(True)
-            layout.addWidget(label)
-            self.camera_labels[cam_id] = label
-            container.setLayout(layout)
+    def toggle_conveyor(self, state):
+        """Конвейер (ТЗ п.4)"""
+        is_on = (state == Qt.Checked)
+        self.robot.toggle_conveyor(is_on)
+        # Меняем подпись
+        self.label_3.setText("ВКЛ" if is_on else "ВЫКЛ")
+        self.write_log(f"Конвейер: {'ВКЛ' if is_on else 'ВЫКЛ'}")
 
-        # Конвертация кадра
-        rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb_image.shape
-        qt_img = QImage(rgb_image.data, w, h, ch * w, QImage.Format_RGB888)
+    def linear_speed_changed(self, value):
+        """Скорость линейного звена (ТЗ п.5)"""
+        self.write_log(f"Скорость линейного звена: {value}")
+
+    def linear_pos_changed(self, value):
+        """Позиция линейного звена (ТЗ п.5)"""
+        self.write_log(f"Позиция линейного звена: {value}")
+
+    # ================= ИНДИКАЦИЯ И ТЕЛЕМЕТРИЯ =================
+
+    def update_leds(self, status):
+        """Управление светофором (ТЗ п.6)"""
+        gray = "background-color: #555555; border-radius: 5px;"
+        self.label_work.setStyleSheet(gray)
+        self.label_wait.setStyleSheet(gray)
+        self.label_pause.setStyleSheet(gray)
+        self.label_stopped.setStyleSheet(gray)
+
+        if status == 'work':
+            self.label_work.setStyleSheet("background-color: #00FF00; border-radius: 5px;") # Зеленый
+        elif status == 'wait':
+            self.label_wait.setStyleSheet("background-color: #0000FF; border-radius: 5px;") # Синий
+        elif status == 'pause':
+            self.label_pause.setStyleSheet("background-color: #FFFF00; border-radius: 5px;") # Желтый
+        elif status == 'estop':
+            self.label_stopped.setStyleSheet("background-color: #FF0000; border-radius: 5px;") # Красный
+
+    def update_telemetry(self):
+        """Обновление таблиц с координатами (ТЗ п.7)"""
+        if not self.robot.connected: return
         
-        # Отображение
-        self.camera_labels[cam_id].setPixmap(QPixmap.fromImage(qt_img))
-
-    # ================= АВТОМАТИКА (Модуль Б) =================
-    def clear_session_list(self):
-        self.auto_list.clear()
-        self.text_session.clear()
-        self.log("Список очищен")
-
-    def start_auto_sorting(self):
-        if not self.auto_list:
-            self.log("Ошибка: Список пуст")
-            return
+        # Actual tool pose
+        pose = self.robot.get_actual_pose()
+        self.table_actual_tool_pose.setItem(0, 0, QTableWidgetItem(f"{pose[0]:.2f}"))
+        self.table_actual_tool_pose.setItem(0, 1, QTableWidgetItem(f"{pose[1]:.2f}"))
+        self.table_actual_tool_pose.setItem(0, 2, QTableWidgetItem(f"{pose[2]:.2f}"))
+        self.table_actual_tool_pose.setItem(0, 3, QTableWidgetItem("Закр." if self.robot.gripper_closed else "Откр."))
         
-        self.log("Начало автоматической сортировки")
-        self.btn_run_session.setEnabled(False)
-        self.process_next_object()
+        # Состояние моторов
+        ticks = self.robot.get_motor_ticks()
+        for i in range(6):
+            self.table_motors.setItem(0, i, QTableWidgetItem(str(ticks[i])))
 
-    def process_next_object(self):
-        if not self.auto_list:
-            self.log("Сортировка завершена")
-            self.btn_run_session.setEnabled(True)
-            return
+    # ================= ЛОГИ И СТАТИСТИКА =================
 
-        obj = self.auto_list.pop(0)
-        self.text_session.setText(", ".join(self.auto_list))
-        self.log(f"Перемещение объекта: {obj}")
-        
-        # =========================================================
-        # ВСТАВИТЬ API РОБОТА ЗДЕСЬ
-        # self.robot.move_to_point(obj.x, obj.y, obj.z)
-        # self.robot.gripper_on()
-        # =========================================================
-        
-        # Имитация работы
-        QTimer.singleShot(2000, self.finish_object_movement)
-
-    def finish_object_movement(self):
-        self.log("Объект перемещен")
-        self.process_next_object()
-
-    # ================= ВСПОМОГАТЕЛЬНЫЕ =================
-    def update_ui_status(self):
-        # Обновление таблицы (имитация)
-        # В реальности здесь вызовы self.robot.get_position() и т.д.
-        pass
-
-    def log(self, message):
+    def write_log(self, message):
+        """Вывод логов в интерфейс (ТЗ п.8)"""
         time_str = datetime.now().strftime("%H:%M:%S")
-        self.text_log.append(f"[{time_str}] {message}")
-        # Автопрокрутка
-        scrollbar = self.text_log.verticalScrollBar()
+        self.text_logs.append(f"[{time_str}] {message}")
+        scrollbar = self.text_logs.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
     def save_logs(self):
-        path = self.text_save_logs.toPlainText()
-        if path:
+        """Сохранение логов (ТЗ п.9)"""
+        path = self.lineEdit.text() # Ваш lineEdit
+        if not path:
+            QMessageBox.warning(self, "Ошибка", "Введите путь для сохранения логов!")
+            return
+        try:
             with open(path, "w", encoding="utf-8") as f:
-                f.write(self.text_log.toPlainText())
-            self.log(f"Логи сохранены в {path}")
+                f.write(self.text_logs.toPlainText())
+            self.write_log(f"Логи сохранены: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить: {e}")
 
-    def closeEvent(self, event):
-        for thread in self.camera_threads:
-            thread.stop()
-        event.accept()
+    def init_stats_table(self):
+        """Заполняем первый столбец таблицы статистики"""
+        categories = ["Объект А", "Объект Б", "Объект В", "Брак"]
+        for i, cat in enumerate(categories):
+            self.table_category.setItem(i, 0, QTableWidgetItem(cat))
+            self.table_category.setItem(i, 1, QTableWidgetItem("0"))
+            self.table_category.setItem(i, 2, QTableWidgetItem("--:--:--"))
+
+    def add_stat(self, row_index):
+        """Добавление объекта в статистику (ТЗ п.10)"""
+        item = self.table_category.item(row_index, 1)
+        current_count = int(item.text()) if item else 0
+        
+        new_count = current_count + 1
+        self.table_category.setItem(row_index, 1, QTableWidgetItem(str(new_count)))
+        
+        time_now = datetime.now().strftime("%H:%M:%S")
+        self.table_category.setItem(row_index, 2, QTableWidgetItem(time_now))
+        
+        cat_name = self.table_category.item(row_index, 0).text()
+        self.write_log(f"В статистику добавлен: {cat_name}")
+
+    def save_stats(self):
+        """Сохранение статистики в реальный формат .xlsx (ТЗ п.11)"""
+        path = self.line_path_to_stats.text().strip()
+        
+        if not path:
+            QMessageBox.warning(self, "Ошибка", "Введите путь для сохранения статистики!")
+            return
+            
+        if not path.endswith('.xlsx'):
+            path += '.xlsx'
+            
+        try:
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Статистика сортировки"
+            
+            headers = ["Категория", "Количество", "Время перемещения"]
+            ws.append(headers)
+            
+            for cell in ws[1]:
+                cell.font = Font(bold=True)
+            
+            for row in range(4):
+                cat = self.table_category.item(row, 0).text()
+                count = self.table_category.item(row, 1).text()
+                time_str = self.table_category.item(row, 2).text()
+                ws.append([cat, int(count), time_str])
+            
+            ws.column_dimensions['A'].width = 15
+            ws.column_dimensions['B'].width = 15
+            ws.column_dimensions['C'].width = 25
+            
+            wb.save(path)
+            self.write_log(f"Статистика успешно сохранена в Excel: {path}")
+            QMessageBox.information(self, "Успех", f"Данные сохранены в файл:\n{path}")
+            
+        except Exception as e:
+            self.write_log(f"Ошибка сохранения статистики: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить файл:\n{e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    app.setStyle("Fusion")
     window = Arm165App()
     window.show()
     sys.exit(app.exec_())

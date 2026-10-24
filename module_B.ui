@@ -886,6 +886,19 @@
      </rect>
     </property>
    </widget>
+   <widget class="QGroupBox" name="groupBox_2">
+    <property name="geometry">
+     <rect>
+      <x>450</x>
+      <y>260</y>
+      <width>361</width>
+      <height>621</height>
+     </rect>
+    </property>
+    <property name="title">
+     <string>Автоматический режим управления</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">

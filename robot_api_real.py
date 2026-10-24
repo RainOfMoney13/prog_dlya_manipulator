@@ -1,29 +1,31 @@
-import time
-
 class RobotARM165:
-    def __init__(self, ip="192.168.1.100", port=8080):
+    def __init__(self):
         self.connected = False
-        self.position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # x, y, z, rx, ry, rz
-    
+        self.position = {"x": 0.0, "y": 0.0, "z": 0.0}
+        self.gripper_closed = False
+        self.conveyor_on = False
+        
     def connect(self):
         self.connected = True
-        print("Робот подключен (Заглушка)")
         return True
     
-    def move_to_point(self, x, y, z):
-        if not self.connected: return False
-        time.sleep(0.5) # Имитация движения
-        self.position[0:3] = [x, y, z]
-        print(f"Робот переместился в X:{x}, Y:{y}, Z:{z}")
-        return True
-    
-    def gripper_on(self):
-        print("Захват ВКЛ")
+    def move_to_start(self):
+        self.position = {"x": 0.0, "y": 0.0, "z": 0.0}
         return True
         
-    def gripper_off(self):
-        print("Захват ВЫКЛ")
+    def toggle_gripper(self, state):
+        self.gripper_closed = state
         return True
-
-    def get_position(self):
-        return self.position
+        
+    def toggle_conveyor(self, state):
+        self.conveyor_on = state
+        return True
+        
+    def pause(self): return True
+    def stop(self): return True
+        
+    def get_actual_pose(self):
+        return [self.position["x"], self.position["y"], self.position["z"]]
+        
+    def get_motor_ticks(self):
+        return [0, 0, 0, 0, 0, 0]
