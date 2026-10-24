@@ -19,14 +19,14 @@
      <rect>
       <x>30</x>
       <y>0</y>
-      <width>401</width>
+      <width>391</width>
       <height>901</height>
      </rect>
     </property>
     <property name="title">
      <string>Ручной режим управления</string>
     </property>
-    <widget class="QPushButton" name="pushButton">
+    <widget class="QPushButton" name="btn_on">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -44,12 +44,12 @@
       <string>Вкл.</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="pushButton_2">
+    <widget class="QPushButton" name="btn_back_to_start">
      <property name="geometry">
       <rect>
        <x>220</x>
        <y>30</y>
-       <width>171</width>
+       <width>161</width>
        <height>25</height>
       </rect>
      </property>
@@ -62,7 +62,7 @@
       <string>Возвращение на старт</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="pushButton_3">
+    <widget class="QPushButton" name="btn_pause">
      <property name="geometry">
       <rect>
        <x>110</x>
@@ -80,12 +80,12 @@
       <string>Пауза</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="pushButton_4">
+    <widget class="QPushButton" name="btn_estop">
      <property name="geometry">
       <rect>
        <x>10</x>
        <y>60</y>
-       <width>381</width>
+       <width>371</width>
        <height>31</height>
       </rect>
      </property>
@@ -135,12 +135,12 @@
       <string>Экстренное торморжение</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="pushButton_5">
+    <widget class="QPushButton" name="btn_manual_start">
      <property name="geometry">
       <rect>
        <x>10</x>
        <y>100</y>
-       <width>381</width>
+       <width>371</width>
        <height>25</height>
       </rect>
      </property>
@@ -153,7 +153,7 @@
       <string>Начало работы ручного режима</string>
      </property>
     </widget>
-    <widget class="QComboBox" name="comboBox">
+    <widget class="QComboBox" name="combo_move">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -186,7 +186,7 @@
       <string>Управление манипулятором</string>
      </property>
     </widget>
-    <widget class="QCheckBox" name="checkBox">
+    <widget class="QCheckBox" name="check_gripper">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -217,7 +217,7 @@
       <string>Откр./Закр.</string>
      </property>
     </widget>
-    <widget class="QCheckBox" name="checkBox_2">
+    <widget class="QCheckBox" name="check_konveer">
      <property name="geometry">
       <rect>
        <x>90</x>
@@ -248,7 +248,7 @@
       <string>Вкл./Выкл.</string>
      </property>
     </widget>
-    <widget class="QTableWidget" name="tableWidget">
+    <widget class="QTableWidget" name="table_motoes">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -320,7 +320,7 @@
       </property>
      </column>
     </widget>
-    <widget class="QTableWidget" name="tableWidget_2">
+    <widget class="QTableWidget" name="table_actual_pose">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -400,7 +400,7 @@
       <string>Управление линейным звеном</string>
      </property>
     </widget>
-    <widget class="QSlider" name="horizontalSlider">
+    <widget class="QSlider" name="slider_skorost">
      <property name="geometry">
       <rect>
        <x>90</x>
@@ -413,7 +413,7 @@
       <enum>Qt::Horizontal</enum>
      </property>
     </widget>
-    <widget class="QSlider" name="horizontalSlider_2">
+    <widget class="QSlider" name="slider_position">
      <property name="geometry">
       <rect>
        <x>90</x>
@@ -452,7 +452,7 @@
       <string>Позиция</string>
      </property>
     </widget>
-    <widget class="QLabel" name="label_9">
+    <widget class="QLabel" name="label_work">
      <property name="geometry">
       <rect>
        <x>20</x>
@@ -562,7 +562,7 @@
       <set>Qt::AlignCenter</set>
      </property>
     </widget>
-    <widget class="QLabel" name="label_10">
+    <widget class="QLabel" name="label_wait">
      <property name="geometry">
       <rect>
        <x>110</x>
@@ -581,7 +581,7 @@
       <set>Qt::AlignCenter</set>
      </property>
     </widget>
-    <widget class="QLabel" name="label_11">
+    <widget class="QLabel" name="label_pause">
      <property name="geometry">
       <rect>
        <x>200</x>
@@ -603,7 +603,7 @@
       <bool>false</bool>
      </property>
     </widget>
-    <widget class="QLabel" name="label_12">
+    <widget class="QLabel" name="label_stopped">
      <property name="geometry">
       <rect>
        <x>280</x>
@@ -676,7 +676,7 @@
       </item>
      </layout>
     </widget>
-    <widget class="QTextEdit" name="textEdit">
+    <widget class="QTextEdit" name="text_logs">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -699,7 +699,7 @@
       <string>Логи</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="pushButton_6">
+    <widget class="QPushButton" name="btn_save_logs">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -712,7 +712,7 @@
       <string>Сохранить логи</string>
      </property>
     </widget>
-    <widget class="QLineEdit" name="lineEdit">
+    <widget class="QLineEdit" name="line_save_logs">
      <property name="geometry">
       <rect>
        <x>130</x>
@@ -723,36 +723,36 @@
      </property>
     </widget>
     <zorder>layoutWidget</zorder>
-    <zorder>pushButton</zorder>
-    <zorder>pushButton_2</zorder>
-    <zorder>pushButton_3</zorder>
-    <zorder>pushButton_4</zorder>
-    <zorder>pushButton_5</zorder>
-    <zorder>comboBox</zorder>
+    <zorder>btn_on</zorder>
+    <zorder>btn_back_to_start</zorder>
+    <zorder>btn_pause</zorder>
+    <zorder>btn_estop</zorder>
+    <zorder>btn_manual_start</zorder>
+    <zorder>combo_move</zorder>
     <zorder>label</zorder>
     <zorder>label_2</zorder>
-    <zorder>checkBox</zorder>
-    <zorder>checkBox_2</zorder>
+    <zorder>check_gripper</zorder>
+    <zorder>check_konveer</zorder>
     <zorder>label_3</zorder>
-    <zorder>tableWidget</zorder>
-    <zorder>tableWidget_2</zorder>
+    <zorder>table_motoes</zorder>
+    <zorder>table_actual_pose</zorder>
     <zorder>label_4</zorder>
     <zorder>label_5</zorder>
     <zorder>label_6</zorder>
-    <zorder>horizontalSlider</zorder>
-    <zorder>horizontalSlider_2</zorder>
+    <zorder>slider_skorost</zorder>
+    <zorder>slider_position</zorder>
     <zorder>label_7</zorder>
     <zorder>label_8</zorder>
-    <zorder>label_9</zorder>
-    <zorder>label_10</zorder>
-    <zorder>label_11</zorder>
-    <zorder>label_12</zorder>
-    <zorder>textEdit</zorder>
+    <zorder>label_work</zorder>
+    <zorder>label_wait</zorder>
+    <zorder>label_pause</zorder>
+    <zorder>label_stopped</zorder>
+    <zorder>text_logs</zorder>
     <zorder>label_13</zorder>
-    <zorder>pushButton_6</zorder>
-    <zorder>lineEdit</zorder>
+    <zorder>btn_save_logs</zorder>
+    <zorder>line_save_logs</zorder>
    </widget>
-   <widget class="QTableWidget" name="tableWidget_3">
+   <widget class="QTableWidget" name="table_category">
     <property name="geometry">
      <rect>
       <x>450</x>
@@ -802,6 +802,11 @@
       <string>Время</string>
      </property>
     </column>
+    <item row="0" column="0">
+     <property name="text">
+      <string>Объект А</string>
+     </property>
+    </item>
     <item row="0" column="1">
      <property name="text">
       <string/>
@@ -810,8 +815,23 @@
       <enum>Unchecked</enum>
      </property>
     </item>
+    <item row="1" column="0">
+     <property name="text">
+      <string>Объект Б</string>
+     </property>
+    </item>
+    <item row="2" column="0">
+     <property name="text">
+      <string>Объект В</string>
+     </property>
+    </item>
+    <item row="3" column="0">
+     <property name="text">
+      <string>Брак</string>
+     </property>
+    </item>
    </widget>
-   <widget class="QPushButton" name="pushButton_7">
+   <widget class="QPushButton" name="btn_plus_1">
     <property name="geometry">
      <rect>
       <x>730</x>
@@ -824,7 +844,7 @@
      <string>+</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="pushButton_8">
+   <widget class="QPushButton" name="btn_plus_2">
     <property name="geometry">
      <rect>
       <x>730</x>
@@ -837,7 +857,7 @@
      <string>+</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="pushButton_9">
+   <widget class="QPushButton" name="btn_plus_3">
     <property name="geometry">
      <rect>
       <x>730</x>
@@ -850,7 +870,7 @@
      <string>+</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="pushButton_10">
+   <widget class="QPushButton" name="btn_plus_4">
     <property name="geometry">
      <rect>
       <x>730</x>
@@ -863,12 +883,12 @@
      <string>+</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="pushButton_11">
+   <widget class="QPushButton" name="btn_save_stats">
     <property name="geometry">
      <rect>
       <x>450</x>
-      <y>220</y>
-      <width>141</width>
+      <y>490</y>
+      <width>131</width>
       <height>25</height>
      </rect>
     </property>
@@ -876,27 +896,271 @@
      <string>Сохранить статистику</string>
     </property>
    </widget>
-   <widget class="QLineEdit" name="lineEdit_2">
+   <widget class="QLineEdit" name="line_save_stats">
     <property name="geometry">
      <rect>
-      <x>450</x>
-      <y>190</y>
-      <width>301</width>
+      <x>590</x>
+      <y>490</y>
+      <width>171</width>
       <height>25</height>
      </rect>
     </property>
    </widget>
-   <widget class="QGroupBox" name="groupBox_2">
+   <widget class="QPushButton" name="btn_add_A">
+    <property name="geometry">
+     <rect>
+      <x>440</x>
+      <y>180</y>
+      <width>71</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Добавить А</string>
+    </property>
+   </widget>
+   <widget class="QTextEdit" name="text_session">
     <property name="geometry">
      <rect>
       <x>450</x>
-      <y>260</y>
-      <width>361</width>
-      <height>621</height>
+      <y>270</y>
+      <width>311</width>
+      <height>111</height>
      </rect>
     </property>
-    <property name="title">
-     <string>Автоматический режим управления</string>
+   </widget>
+   <widget class="QPushButton" name="btn_add_B">
+    <property name="geometry">
+     <rect>
+      <x>520</x>
+      <y>180</y>
+      <width>71</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Добавить Б</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_add_V">
+    <property name="geometry">
+     <rect>
+      <x>600</x>
+      <y>180</y>
+      <width>71</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Добавить В</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_add_reject">
+    <property name="geometry">
+     <rect>
+      <x>680</x>
+      <y>180</y>
+      <width>91</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Доб. брак</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_delete_last_obj">
+    <property name="geometry">
+     <rect>
+      <x>580</x>
+      <y>390</y>
+      <width>181</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Удалить последний объект</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_clear_list_session">
+    <property name="geometry">
+     <rect>
+      <x>450</x>
+      <y>390</y>
+      <width>121</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Очистить список</string>
+    </property>
+   </widget>
+   <widget class="QLineEdit" name="line_save_session">
+    <property name="geometry">
+     <rect>
+      <x>580</x>
+      <y>460</y>
+      <width>181</width>
+      <height>25</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_save_session">
+    <property name="geometry">
+     <rect>
+      <x>450</x>
+      <y>460</y>
+      <width>121</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Сохранить сессию</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_start_move">
+    <property name="geometry">
+     <rect>
+      <x>450</x>
+      <y>420</y>
+      <width>311</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>9</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>Начать движение по заданным точкам</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_obj_A">
+    <property name="geometry">
+     <rect>
+      <x>440</x>
+      <y>240</y>
+      <width>71</width>
+      <height>17</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">background-color: rgb(107, 107, 107);</string>
+    </property>
+    <property name="text">
+     <string>Объект А</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_obj_B">
+    <property name="geometry">
+     <rect>
+      <x>520</x>
+      <y>240</y>
+      <width>71</width>
+      <height>17</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">background-color: rgb(107, 107, 107);</string>
+    </property>
+    <property name="text">
+     <string>Объект Б</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_obj_V">
+    <property name="geometry">
+     <rect>
+      <x>600</x>
+      <y>240</y>
+      <width>71</width>
+      <height>17</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">background-color: rgb(107, 107, 107);</string>
+    </property>
+    <property name="text">
+     <string>Объект В</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_reject">
+    <property name="geometry">
+     <rect>
+      <x>680</x>
+      <y>240</y>
+      <width>91</width>
+      <height>17</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">background-color: rgb(107, 107, 107);</string>
+    </property>
+    <property name="text">
+     <string>Брак</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_new_cell_A">
+    <property name="geometry">
+     <rect>
+      <x>440</x>
+      <y>210</y>
+      <width>71</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Нов. яч. А</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_new_cell_reject">
+    <property name="geometry">
+     <rect>
+      <x>680</x>
+      <y>210</y>
+      <width>91</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Нов. яч. Брак</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_new_cell_V">
+    <property name="geometry">
+     <rect>
+      <x>600</x>
+      <y>210</y>
+      <width>71</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Нов. яч. В</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_new_cell_B">
+    <property name="geometry">
+     <rect>
+      <x>520</x>
+      <y>210</y>
+      <width>71</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Нов. яч. Б</string>
     </property>
    </widget>
   </widget>
