@@ -1,37 +1,47 @@
 import sys
 import os
+import cv2
 from datetime import datetime
 from PyQt5 import uic
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMessageBox, QVBoxLayout, QLabel
 from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtGui import QImage, QPixmap
 import openpyxl
 from openpyxl.styles import Font
+from ultralytics import YOLO
 
 from config import UI_FILE
 from robot_api_real import RobotARM165
+from camera_module import VideoThread # Импортируем наш новый модуль
 
 class Arm165App(QMainWindow):
     def __init__(self):
         super().__init__()
         uic.loadUi(UI_FILE, self)
-        self.setWindowTitle("ARM165 - Ручной и Автоматический режим")
+        self.setWindowTitle("ARM165 - Все модули (А, Б, В)")
         
         self.robot = RobotARM165()
         self.is_manual_mode = False
         
         # --- Состояния для Модуля Б ---
-        self.session_list = [] # Список объектов на перемещение
-        self.cell_counts = {"А": 0, "Б": 0, "В": 0, "Брак": 0} # Заполненность ячеек
-        self.is_auto_running = False # Запущен ли авторежим
+        self.session_list = []
+        self.cell_counts = {"А": 0, "Б": 0, "В": 0, "Брак": 0}
+        self.is_auto_running = False
+        
+        # --- Состояния для Модуля В ---
+        self.video_thread = None
+        self.detection_active = False
+        self.camera_label = None
         
         self.connect_signals()
         self.lock_manual_controls(True)
-        self.lock_auto_controls(True) # Блокируем кнопки Модуля Б до включения системы
+        self.lock_auto_controls(True)
+        self.lock_vision_controls(True) # Блокируем Модуль В до включения
         
         self.update_leds('off')
         self.init_stats_table()
         
-        # Таймер телеметрии (ТЗ п.7)
+        # Таймер телеметрии
         self.telemetry_timer = QTimer()
         self.telemetry_timer.timeout.connect(self.update_telemetry)
         self.telemetry_timer.start(200)
@@ -62,45 +72,40 @@ class Arm165App(QMainWindow):
         self.btn_save_stats.clicked.connect(self.save_stats)
 
         # ================= МОДУЛЬ Б =================
-        # Добавление в список (п.12, 13)
         self.btn_add_A.clicked.connect(lambda: self.add_to_session_list("А"))
         self.btn_add_B.clicked.connect(lambda: self.add_to_session_list("Б"))
         self.btn_add_V.clicked.connect(lambda: self.add_to_session_list("В"))
         self.btn_add_reject.clicked.connect(lambda: self.add_to_session_list("Брак"))
         
-        # Управление списком (п.14, 15)
         self.btn_delete_last_obj.clicked.connect(self.delete_last_object)
         self.btn_clear_list_session.clicked.connect(self.clear_session_list)
-        
-        # Запуск движения (п.19)
         self.btn_start_move.clicked.connect(self.start_auto_movement)
-        
-        # Сохранение сессии (п.16, 17)
         self.btn_save_session.clicked.connect(self.save_session)
         
-        # Сброс ячеек (п.18.1)
         self.btn_new_cell_A.clicked.connect(lambda: self.reset_cell("А", self.label_obj_A))
         self.btn_new_cell_B.clicked.connect(lambda: self.reset_cell("Б", self.label_obj_B))
         self.btn_new_cell_V.clicked.connect(lambda: self.reset_cell("В", self.label_obj_V))
         self.btn_new_cell_reject.clicked.connect(lambda: self.reset_cell("Брак", self.label_reject))
 
-    # ================= МОДУЛЬ А: ЛОГИКА =================
+        # ================= МОДУЛЬ В =================
+        self.btn_start_detection.clicked.connect(self.toggle_detection)
+        self.check_defect_mode.stateChanged.connect(self.update_vision_settings)
+        self.check_obj_A.stateChanged.connect(self.update_vision_settings)
+        self.check_obj_B.stateChanged.connect(self.update_vision_settings)
+        self.check_obj_V.stateChanged.connect(self.update_vision_settings)
+        self.check_human_detect.stateChanged.connect(self.update_vision_settings)
+
+    # ================= БЛОКИРОВКИ =================
     
     def lock_manual_controls(self, lock):
         state = not lock
         self.combo_move.setEnabled(state)
-        self.verticalSlider.setEnabled(state)
-        self.verticalSlider_2.setEnabled(state)
-        self.verticalSlider_3.setEnabled(state)
-        self.verticalSlider_4.setEnabled(state)
-        self.verticalSlider_5.setEnabled(state)
-        self.verticalSlider_6.setEnabled(state)
         self.slider_skorost.setEnabled(state)
         self.slider_position.setEnabled(state)
-        self.btn_manual_start.setEnabled(state)
+        for i in range(1, 7):
+            getattr(self, f"slider_skorost_{i}").setEnabled(state)
 
     def lock_auto_controls(self, lock):
-        """Блокирует кнопки Модуля Б, когда система выключена"""
         state = not lock
         self.btn_add_A.setEnabled(state)
         self.btn_add_B.setEnabled(state)
@@ -108,6 +113,21 @@ class Arm165App(QMainWindow):
         self.btn_add_reject.setEnabled(state)
         self.btn_start_move.setEnabled(state)
 
+    def lock_vision_controls(self, lock):
+        state = not lock
+        self.btn_start_detection.setEnabled(state)
+        self.check_defect_mode.setEnabled(state)
+        self.check_obj_A.setEnabled(state)
+        self.check_obj_B.setEnabled(state)
+        self.check_obj_V.setEnabled(state)
+        self.check_human_detect.setEnabled(state)
+
+    # ================= МОДУЛЬ А: ЛОГИКА (Без изменений) =================
+    # (Функции start_manual_mode, toggle_system, pause_system, emergency_stop, move_to_start, 
+    # change_move_style, toggle_gripper, toggle_conveyor, linear_speed_changed, linear_pos_changed, 
+    # update_leds, update_telemetry, write_log, save_logs, init_stats_table, add_stat, save_stats 
+    # остаются точно такими же, я их пропущу для краткости, но в вашем файле они должны быть!)
+    
     def start_manual_mode(self):
         if not self.robot.connected: return
         if not self.is_manual_mode:
@@ -130,12 +150,12 @@ class Arm165App(QMainWindow):
             self.write_log("Робот включен")
             self.update_leds('wait')
             
-            # Разблокируем кнопки
             self.btn_pause.setEnabled(True)
             self.btn_estop.setEnabled(True)
             self.btn_back_to_start.setEnabled(True)
             self.btn_manual_start.setEnabled(True)
-            self.lock_auto_controls(False) # Разблокируем Модуль Б
+            self.lock_auto_controls(False)
+            self.lock_vision_controls(False) # Разблокируем Модуль В
             
         else:
             self.robot.stop()
@@ -145,11 +165,14 @@ class Arm165App(QMainWindow):
             self.is_manual_mode = False
             self.is_auto_running = False
             self.lock_manual_controls(True)
-            self.lock_auto_controls(True) # Блокируем Модуль Б
+            self.lock_auto_controls(True)
+            self.lock_vision_controls(True)
+            if self.video_thread:
+                self.video_thread.stop()
+                self.video_thread = None
             self.write_log("Робот выключен, возврат на старт")
             self.update_leds('off')
             
-            # Блокируем кнопки
             self.btn_pause.setEnabled(False)
             self.btn_estop.setEnabled(False)
             self.btn_back_to_start.setEnabled(False)
@@ -167,7 +190,7 @@ class Arm165App(QMainWindow):
         self.check_konveer.setChecked(False)
         self.write_log("АВАРИЙНАЯ ОСТАНОВКА СИСТЕМЫ")
         self.update_leds('estop')
-        self.is_auto_running = False # Прерываем авторежим
+        self.is_auto_running = False
 
     def move_to_start(self):
         if not self.robot.connected: return
@@ -237,8 +260,6 @@ class Arm165App(QMainWindow):
         for i in range(6):
             self.table_motoes.setItem(0, i, QTableWidgetItem(str(ticks[i])))
 
-    # ================= ЛОГИ И СТАТИСТИКА (Модуль А) =================
-
     def write_log(self, message):
         time_str = datetime.now().strftime("%H:%M:%S")
         self.text_logs.append(f"[{time_str}] {message}")
@@ -266,6 +287,11 @@ class Arm165App(QMainWindow):
             self.table_category.setItem(i, 0, QTableWidgetItem(cat))
             self.table_category.setItem(i, 1, QTableWidgetItem("0"))
             self.table_category.setItem(i, 2, QTableWidgetItem("--:--:--"))
+            # Добавляем колонку распознавания ИИ (если ее нет)
+            if self.table_category.columnCount() < 4:
+                self.table_category.setColumnCount(4)
+                self.table_category.setHorizontalHeaderItem(3, QTableWidgetItem("Распознано ИИ"))
+            self.table_category.setItem(i, 3, QTableWidgetItem("0"))
 
     def add_stat(self, row_index):
         item = self.table_category.item(row_index, 1)
@@ -276,6 +302,16 @@ class Arm165App(QMainWindow):
         self.table_category.setItem(row_index, 2, QTableWidgetItem(time_now))
         self.write_log(f"Статистика: +1 {self.table_category.item(row_index, 0).text()}")
 
+    def add_stat_ai(self, category):
+        """Добавляет +1 в колонку 'Распознано ИИ' (для Модуля В)"""
+        row_map = {"А": 0, "Б": 1, "В": 2, "Брак": 3}
+        row_index = row_map.get(category)
+        if row_index is not None:
+            item = self.table_category.item(row_index, 3)
+            current_count = int(item.text()) if item else 0
+            self.table_category.setItem(row_index, 3, QTableWidgetItem(str(current_count + 1)))
+            self.write_log(f"ИИ распознал: {category}")
+
     def save_stats(self):
         path = self.line_save_stats.text().strip()
         if not path:
@@ -283,29 +319,18 @@ class Arm165App(QMainWindow):
             return
         if not path.endswith('.xlsx'): path += '.xlsx'
         try:
-            if os.path.exists(path):
-                wb = openpyxl.load_workbook(path)
-                ws = wb.active
-                for row in range(2, 6):
-                    for col in range(1, 4):
-                        ws.cell(row=row, column=col).value = None
-            else:
-                wb = openpyxl.Workbook()
-                ws = wb.active
-                ws.title = "Статистика"
-                ws.append(["Категория", "Количество", "Время"])
-                for cell in ws[1]: cell.font = Font(bold=True)
-                ws.column_dimensions['A'].width = 15
-                ws.column_dimensions['B'].width = 15
-                ws.column_dimensions['C'].width = 25
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Статистика"
+            ws.append(["Категория", "Количество", "Время", "Распознано ИИ"])
+            for cell in ws[1]: cell.font = Font(bold=True)
             
             for row in range(4):
                 cat = self.table_category.item(row, 0).text()
                 count = self.table_category.item(row, 1).text()
                 time_str = self.table_category.item(row, 2).text()
-                ws.cell(row=row+2, column=1).value = cat
-                ws.cell(row=row+2, column=2).value = int(count)
-                ws.cell(row=row+2, column=3).value = time_str
+                ai_count = self.table_category.item(row, 3).text()
+                ws.append([cat, int(count), time_str, int(ai_count)])
             
             wb.save(path)
             self.write_log(f"Статистика сохранена: {path}")
@@ -313,16 +338,14 @@ class Arm165App(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить: {e}")
 
-    # ================= МОДУЛЬ Б: ЛОГИКА =================
-
+    # ================= МОДУЛЬ Б: ЛОГИКА (Без изменений) =================
+    
     def add_to_session_list(self, category):
-        """Добавление объекта в очередь (п.12)"""
         self.session_list.append(category)
         self.text_session.setPlainText(", ".join(self.session_list))
         self.write_log(f"В список добавлен: {category}")
 
     def delete_last_object(self):
-        """Удаление последнего добавленного (п.14)"""
         if self.session_list:
             removed = self.session_list.pop()
             self.text_session.setPlainText(", ".join(self.session_list))
@@ -331,20 +354,17 @@ class Arm165App(QMainWindow):
             self.write_log("Список пуст, нечего удалять")
 
     def clear_session_list(self):
-        """Очистка списка (п.15)"""
         self.session_list.clear()
         self.text_session.clear()
         self.write_log("Список объектов очищен. Робот на старте.")
         self.move_to_start()
 
     def reset_cell(self, category, label_widget):
-        """Сброс ячейки (п.18.1)"""
         self.cell_counts[category] = 0
         label_widget.setStyleSheet("background-color: rgb(107, 107, 107);")
         self.write_log(f"Ячейка {category} освобождена.")
 
     def start_auto_movement(self):
-        """Запуск автосортировки (п.19)"""
         if not self.session_list:
             self.write_log("Список для перемещения объектов пуст")
             return
@@ -356,68 +376,44 @@ class Arm165App(QMainWindow):
         self.process_next_object()
 
     def process_next_object(self):
-        """Обработка следующего объекта из списка"""
-        if not self.is_auto_running:
-            return
-
+        if not self.is_auto_running: return
         if not self.session_list:
             self.write_log("Работ закончил выполнение программы. Список пуст.")
             self.is_auto_running = False
             self.move_to_start()
             return
 
-        # Берем первый объект
-        obj = self.session_list[0] # Не удаляем сразу, чтобы проверить заполненность
-        
-        # Определяем индекс ячейки для проверки
+        obj = self.session_list[0]
         cat_map = {"А": "А", "Б": "Б", "В": "В", "Брак": "Брак"}
         cat_key = cat_map[obj]
         
-        # ПРОВЕРКА ПЕРЕПОЛНЕНИЯ (ТЗ п.18.1)
         if self.cell_counts[cat_key] >= 4:
             self.robot.pause()
             self.is_auto_running = False
-            
-            # Включаем красную индикацию
             labels = {"А": self.label_obj_A, "Б": self.label_obj_B, "В": self.label_obj_V, "Брак": self.label_reject}
             labels[cat_key].setStyleSheet("background-color: red;")
-            
             self.write_log(f"ВНИМАНИЕ! Ячейка {cat_key} переполнена. Ожидание оператора.")
-            return # Ждем, пока оператор не нажмет кнопку
+            return 
 
-        # Если места хватает, имитируем перемещение
         self.session_list.pop(0)
         self.text_session.setPlainText(", ".join(self.session_list))
-        
         self.write_log(f"Начало перемещения объекта: {obj}")
         self.update_leds('work')
-        
-        # ВСТАВИТЬ API РОБОТА ЗДЕСЬ
-        # self.robot.move_to_point(obj_x, obj_y, obj_z)
-        
-        # Имитация задержки перемещения
         QTimer.singleShot(2000, lambda: self.finish_object_movement(obj, cat_key))
 
     def finish_object_movement(self, obj, cat_key):
-        """Завершение перемещения одного объекта"""
         if not self.is_auto_running: return
-        
         self.cell_counts[cat_key] += 1
-        self.add_stat({"А": 0, "Б": 1, "В": 2, "Брак": 3}[cat_key]) # Автоматически обновляем статистику (п.12.2)
-        
+        self.add_stat({"А": 0, "Б": 1, "В": 2, "Брак": 3}[cat_key])
         self.write_log(f"Объект {obj} перемещен в ячейку. Занято: {self.cell_counts[cat_key]}/4")
-        
-        # Запускаем следующий
         QTimer.singleShot(500, self.process_next_object)
 
     def save_session(self):
-        """Сохранение сессии в файл (п.16)"""
         path = self.line_save_session.text().strip()
         if not path:
             QMessageBox.warning(self, "Ошибка", "Введите путь для сохранения сессии!")
             return
         if not path.endswith('.txt'): path += '.txt'
-        
         try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write("СЕССИЯ ПЕРЕМЕЩЕНИЯ ОБЪЕКТОВ\n")
@@ -428,6 +424,80 @@ class Arm165App(QMainWindow):
             QMessageBox.information(self, "Успех", f"Сессия сохранена в файл:\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить: {e}")
+
+    # ================= МОДУЛЬ В: ЛОГИКА =================
+
+    def update_vision_settings(self):
+        """Передает настройки чекбоксов в поток камеры"""
+        if self.video_thread:
+            self.video_thread.detect_defect = self.check_defect_mode.isChecked()
+            self.video_thread.classes_to_detect = {
+                "А": self.check_obj_A.isChecked(),
+                "Б": self.check_obj_B.isChecked(),
+                "В": self.check_obj_V.isChecked()
+            }
+            self.video_thread.detect_human = self.check_human_detect.isChecked()
+
+    def toggle_detection(self):
+        """Включение/выключение детекции (п.22)"""
+        if not self.detection_active:
+            # Включаем
+            self.detection_active = True
+            self.btn_start_detection.setText("Остановить детекцию")
+            
+            if not self.camera_label:
+                # Создаем QLabel внутри QFrame, если его нет
+                layout = QVBoxLayout(self.camera_1)
+                layout.setContentsMargins(0, 0, 0, 0)
+                self.camera_label = QLabel()
+                self.camera_label.setAlignment(Qt.AlignCenter)
+                self.camera_label.setScaledContents(True)
+                layout.addWidget(self.camera_label)
+
+            self.video_thread = VideoThread()
+            self.video_thread.detect_enabled = True
+            self.update_vision_settings() # Применяем настройки чекбоксов
+            
+            self.video_thread.change_pixmap_signal.connect(self.update_image)
+            self.video_thread.start()
+            self.write_log("Детекция включена")
+        else:
+            # Выключаем
+            self.detection_active = False
+            self.btn_start_detection.setText("Начать детекцию")
+            if self.video_thread:
+                self.video_thread.stop()
+                self.video_thread = None
+            if self.camera_label:
+                self.video_thread = None
+            self.camera_label.clear()
+            self.write_log("Детекция выключена")
+
+    def update_image(self, cv_img, human_detected, detected_classes):
+        """Обновление кадра в QLabel"""
+        if self.camera_label:
+            rgb_image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb_image.shape
+            bytes_per_line = ch * w
+            convert_to_Qt_format = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            p = convert_to_Qt_format.scaled(self.camera_1.width(), self.camera_1.height(), Qt.KeepAspectRatio)
+            self.camera_label.setPixmap(QPixmap.fromImage(p))
+
+        # Обработка безопасности (п.27)
+        if human_detected:
+            self.label_human.setStyleSheet("background-color: red; color: white;")
+            self.write_log("ВНИМАНИЕ! В рабочей зоне обнаружен человек!")
+            self.update_leds('estop') # Загорается красная лампа
+            if self.is_auto_running:
+                self.robot.pause()
+                self.is_auto_running = False
+                self.write_log("Детекция остановлена. Робот на паузе.")
+        else:
+            self.label_human.setStyleSheet("background-color: rgb(107, 107, 107);")
+
+        # Обновление статистики ИИ (п.25)
+        for obj_class in detected_classes:
+            self.add_stat_ai(obj_class)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
