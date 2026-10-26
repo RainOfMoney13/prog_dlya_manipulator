@@ -1,7 +1,7 @@
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UI_FILE = os.path.join(BASE_DIR, "module_V.ui")
+UI_FILE = os.path.join(BASE_DIR, "module_G.ui")
 
 SAFETY_LIMITS = {
     "x_min": -0.95, "x_max": 0.95,

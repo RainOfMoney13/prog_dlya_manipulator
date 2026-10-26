@@ -2,13 +2,7 @@ import cv2
 import numpy as np
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtGui import QImage
-
-try:
-    
-    YOLO_AVAILABLE = True
-except ImportError:
-    YOLO_AVAILABLE = False
-    print("ВНИМАНИЕ: ultralytics не установлен. Работает только цветовая детекция (заглушка).")
+from ultralytics import YOLO
 
 class VideoThread(QThread):
     # Сигналы: кадр (numpy), флаг человека (bool), список распознанных классов (list)
@@ -23,13 +17,11 @@ class VideoThread(QThread):
         self.detect_human = False
         
         # Загружаем модель (если есть)
-        if YOLO_AVAILABLE:
-            try:
-                self.model = YOLO("yolov8n.pt") # Используем стандартную модель
-            except Exception as e:
-                print(f"Ошибка загрузки YOLO: {e}")
-                self.model = None
-        else:
+        try:
+            self.model = YOLO("yolov8n.pt") 
+            print("Модель YOLO успешно загружена!")
+        except Exception as e:
+            print(f"Ошибка загрузки YOLO: {e}")
             self.model = None
 
     def run(self):
