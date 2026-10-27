@@ -21,8 +21,11 @@ class RobotARM165:
         self.conveyor_on = state
         return True
         
-    def pause(self): return True
-    def stop(self): return True
+    def pause(self): 
+        return True
+    
+    def stop(self): 
+        return True
         
     def get_actual_pose(self):
         return [self.position["x"], self.position["y"], self.position["z"]]
