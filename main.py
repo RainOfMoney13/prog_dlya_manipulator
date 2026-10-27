@@ -22,6 +22,7 @@ class Arm165App(QMainWindow):
         
         self.robot = RobotARM165()
         self.is_manual_mode = False
+        self.current_move_mode = "MoveL"
         
         # --- Состояния для Модуля Б ---
         self.session_list = []
@@ -67,6 +68,14 @@ class Arm165App(QMainWindow):
         self.combo_move.currentIndexChanged.connect(self.change_move_style)
         self.check_gripper.stateChanged.connect(self.toggle_gripper)
         self.check_konveer.stateChanged.connect(self.toggle_conveyor)
+        
+        # Управление суставами (6 вертикальных слайдеров)
+        self.slider_skorost_1.valueChanged.connect(lambda: self.joint_slider_changed(0))
+        self.slider_skorost_2.valueChanged.connect(lambda: self.joint_slider_changed(1))
+        self.slider_skorost_3.valueChanged.connect(lambda: self.joint_slider_changed(2))
+        self.slider_skorost_4.valueChanged.connect(lambda: self.joint_slider_changed(3))
+        self.slider_skorost_5.valueChanged.connect(lambda: self.joint_slider_changed(4))
+        self.slider_skorost_6.valueChanged.connect(lambda: self.joint_slider_changed(5))
         
         self.slider_skorost.valueChanged.connect(self.linear_speed_changed)
         self.slider_position.valueChanged.connect(self.linear_pos_changed)
@@ -244,10 +253,17 @@ class Arm165App(QMainWindow):
         self.update_leds('wait')
 
     def change_move_style(self, index):
-        style = self.combo_move.currentText()
-        self.write_log(f"Режим управления: {style}")
-        self.label.setText(f"Управление манипулятором ({'MoveL' if index == 0 else 'MoveJ'})")
-
+        if index == 0:
+            self.current_move_mode = "MoveL"
+            self.write_log("Режим: Move L (линейное X, Y, Z, Rx, Ry, Rz)")
+            self.label.setText("Управление: MoveL (X, Y, Z, Rx, Ry, Rz)")
+            # Меняем подписи у слайдеров (если они есть, или просто пишем в лог)
+        else:
+            self.current_move_mode = "MoveJ"
+            self.write_log("Режим: Move J (по суставам J1-J6)")
+            self.label.setText("Управление: MoveJ (J1..J6)")
+            
+            
     def toggle_gripper(self, state):
         is_closed = (state == Qt.Checked)
         self.robot.toggle_gripper(is_closed)
@@ -272,6 +288,34 @@ class Arm165App(QMainWindow):
             self.write_log(f"Позиция линейного звена: {value}")
             QTimer.singleShot(1000, lambda: self.update_leds('wait') if self.is_manual_mode else None)
 
+    def joint_slider_changed(self, joint_index):
+        """Обработка движения любого из 6 слайдеров (работает и для MoveJ, и для MoveL)"""
+        if not self.robot.connected or not self.is_manual_mode:
+            return
+            
+        slider = getattr(self, f"slider_skorost_{joint_index + 1}")
+        value = slider.value()
+        
+        if self.current_move_mode == "MoveJ":
+            # РЕЖИМ MOVE J: Управляем углами суставов J1-J6
+            self.write_log(f"MoveJ: Сустав J{joint_index + 1} = {value}°")
+            # ВСТАВИТЬ API РОБОТА: 
+            # self.robot.set_joint_angle(index=joint_index, angle=value)
+            
+        elif self.current_move_mode == "MoveL":
+            # РЕЖИМ MOVE L: Те же слайдеры управляют X, Y, Z, Rx, Ry, Rz
+            axes = ["X", "Y", "Z", "Rx", "Ry", "Rz"]
+            axis_name = axes[joint_index]
+            self.write_log(f"MoveL: {axis_name} = {value}")
+            
+            # ВСТАВИТЬ API РОБОТА:
+            # Здесь нужно собрать все 6 значений и отправить в API
+        self.update_leds('work')
+        QTimer.singleShot(1000, lambda: self.update_leds('wait') if self.is_manual_mode else None)
+        
+        
+        
+        
     def update_leds(self, status):
         gray = "background-color: #555555; border-radius: 5px;"
         self.label_work.setStyleSheet(gray)
