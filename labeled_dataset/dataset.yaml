@@ -1,8 +1,0 @@
-names:
-  0: object_A
-  1: object_B
-  2: object_V
-  3: defect
-path: /home/vladbat/Projects/antidem_svoi/labeled_dataset
-train: images/train
-val: images/val

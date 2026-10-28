@@ -5,7 +5,6 @@ from PyQt5.QtGui import QImage
 from ultralytics import YOLO
 
 class VideoThread(QThread):
-    # Сигналы: кадр (numpy), флаг человека (bool), список распознанных классов (list)
     change_pixmap_signal = pyqtSignal(np.ndarray, bool, list)
     
     def __init__(self):
@@ -16,16 +15,18 @@ class VideoThread(QThread):
         self.classes_to_detect = {"А": False, "Б": False, "В": False}
         self.detect_human = False
         
-        # Загружаем модель (если есть)
         try:
-            self.model = YOLO("yolov8n.pt") 
-            print("Модель YOLO успешно загружена!")
+            # 1. Модель для ваших деталей (обученная)
+            self.model = YOLO("runs/train/defect_model/weights/best.pt") 
+            # 2. Модель для поиска людей (стандартная)
+            self.human_model = YOLO("yolov8n.pt")
+            print("Модели YOLO успешно загружены!")
         except Exception as e:
             print(f"Ошибка загрузки YOLO: {e}")
             self.model = None
+            self.human_model = None
 
     def run(self):
-        # Используем 0 (веб-камера). На конкурсе поменяете на нужный индекс.
         cap = cv2.VideoCapture(0) 
         
         if not cap.isOpened():
@@ -40,52 +41,47 @@ class VideoThread(QThread):
             human_detected = False
             detected_classes = []
 
-            # Если включена детекция
             if self.detect_enabled:
-                # 1. Детекция человека (по YOLO, если доступно)
-                if self.detect_human and self.model:
-                    results = self.model(frame, classes=[0], verbose=False) # 0 - класс 'person' в COCO
-                    if len(results[0].boxes) > 0:
+                # === 1. ДЕТЕКЦИЯ ЧЕЛОВЕКА (стандартная модель) ===
+                if self.detect_human and self.human_model:
+                    human_results = self.human_model(frame, classes=[0], verbose=False) # 0 - person
+                    if len(human_results[0].boxes) > 0:
                         human_detected = True
-                        for box in results[0].boxes:
+                        for box in human_results[0].boxes:
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
                             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
                             cv2.putText(frame, "HUMAN", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
-                # 2. Детекция объектов (если человека нет)
-                if not human_detected:
-                    # Имитация детекции классов А, Б, В (для теста без обученной модели)
-                    # В реальности здесь должен быть ваш YOLO, обученный на детали.
-                    # Для примера просто ищем цветные пятна:
-                    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+                # === 2. ДЕТЕКЦИЯ ДЕТАЛЕЙ (обученная модель) ===
+                # Если человека нет, ищем детали
+                if not human_detected and self.model:
+                    results = self.model(frame, conf=0.5, verbose=False)
                     
-                    # Красный (Объект А)
-                    if self.classes_to_detect["А"]:
-                        mask = cv2.inRange(hsv, np.array([0, 100, 100]), np.array([10, 255, 255]))
-                        if cv2.countNonZero(mask) > 500:
-                            detected_classes.append("А")
-                            cv2.putText(frame, "Obj A", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-                    # Зеленый (Объект Б)
-                    if self.classes_to_detect["Б"]:
-                        mask = cv2.inRange(hsv, np.array([40, 100, 100]), np.array([80, 255, 255]))
-                        if cv2.countNonZero(mask) > 500:
-                            detected_classes.append("Б")
-                            cv2.putText(frame, "Obj B", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-                    # Синий (Объект В)
-                    if self.classes_to_detect["В"]:
-                        mask = cv2.inRange(hsv, np.array([100, 100, 100]), np.array([130, 255, 255]))
-                        if cv2.countNonZero(mask) > 500:
-                            detected_classes.append("В")
-                            cv2.putText(frame, "Obj V", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-                    # Брак (желтый)
-                    if self.detect_defect:
-                        mask = cv2.inRange(hsv, np.array([20, 100, 100]), np.array([40, 255, 255]))
-                        if cv2.countNonZero(mask) > 500:
-                            detected_classes.append("Брак")
-                            cv2.putText(frame, "DEFECT", (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    for r in results:
+                        for box in r.boxes:
+                            cls_id = int(box.cls[0])
+                            conf = float(box.conf[0])
+                            
+                            # Получаем имя класса из модели
+                            class_name = self.model.names[cls_id]
+                            
+                            # Сопоставляем английское имя (из модели) с русским (для логов)
+                            name_map = {"object_A": "А", "object_B": "Б", "object_V": "В", "defect": "Брак"}
+                            ru_name = name_map.get(class_name, class_name)
+                            
+                            # Проверяем, включен ли этот класс в чекбоксах
+                            if ru_name in ["А", "Б", "В"] and not self.classes_to_detect.get(ru_name, False):
+                                continue
+                            if ru_name == "Брак" and not self.detect_defect:
+                                continue
+                            
+                            # Рисуем рамку и текст
+                            x1, y1, x2, y2 = map(int, box.xyxy[0])
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                            label = f"{ru_name} ({conf:.2f})"
+                            cv2.putText(frame, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                            
+                            detected_classes.append(ru_name)
 
             # Отправляем кадр и данные в главный поток
             self.change_pixmap_signal.emit(frame, human_detected, detected_classes)
