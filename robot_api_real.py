@@ -32,3 +32,9 @@ class RobotARM165:
         
     def get_motor_ticks(self):
         return [0, 0, 0, 0, 0, 0]
+    
+    def get_motor_radians(self):
+        return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    def get_motor_temps(self):
+        return [25.0, 25.0, 25.0, 25.0, 25.0, 25.0]

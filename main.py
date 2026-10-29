@@ -334,15 +334,33 @@ class Arm165App(QMainWindow):
 
     def update_telemetry(self):
         if not self.robot.connected: return
+        
+        # 1. Запрашиваем данные у робота (через наш обновленный robot_api_real.py)
+        ticks = self.robot.get_motor_ticks()
+        radians = self.robot.get_motor_radians()
+        temps = self.robot.get_motor_temps()
+        
+        # 2. Заполняем таблицу
+        for i in range(6):
+            # Тики
+            self.table_motoes.setItem(0, i, QTableWidgetItem(str(ticks[i])))
+            
+            # Радианы
+            self.table_motoes.setItem(1, i, QTableWidgetItem(f"{radians[i]:.2f}"))
+            
+            # Градусы (переводим из радиан)
+            degrees = radians[i] * (180.0 / 3.14159)
+            self.table_motoes.setItem(2, i, QTableWidgetItem(f"{degrees:.1f}"))
+            
+            # Температура
+            self.table_motoes.setItem(3, i, QTableWidgetItem(f"{temps[i]:.1f}"))
+            
+        # 3. Обновляем координаты инструмента (Actual tool pose)
         pose = self.robot.get_actual_pose()
         self.table_actual_pose.setItem(0, 0, QTableWidgetItem(f"{pose[0]:.2f}"))
         self.table_actual_pose.setItem(0, 1, QTableWidgetItem(f"{pose[1]:.2f}"))
         self.table_actual_pose.setItem(0, 2, QTableWidgetItem(f"{pose[2]:.2f}"))
         self.table_actual_pose.setItem(0, 3, QTableWidgetItem("Закр." if self.robot.gripper_closed else "Откр."))
-        
-        ticks = self.robot.get_motor_ticks()
-        for i in range(6):
-            self.table_motoes.setItem(0, i, QTableWidgetItem(str(ticks[i])))
 
     def write_log(self, message):
         time_str = datetime.now().strftime("%H:%M:%S")
@@ -577,7 +595,13 @@ class Arm165App(QMainWindow):
             
         # Логика Модуля Г: реакция на найденный объект
         if self.full_auto_active and detected_classes:
-            self.process_full_auto_object(detected_classes[0])
+            current_time = datetime.now()
+            # Проверяем, прошло ли достаточно времени с последнего распознавания (например, 3 секунды)
+            if (current_time - self.last_detect_time).total_seconds() > 3.0:
+                self.last_detect_time = current_time # Обновляем время
+                self.process_full_auto_object(detected_classes[0])
+            else:
+                pass # Игнорируем повторное считывание
 
     # ================= МОДУЛЬ Г: ЛОГИКА =================
 

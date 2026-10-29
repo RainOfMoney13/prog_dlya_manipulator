@@ -17,7 +17,7 @@ class VideoThread(QThread):
         
         try:
             # 1. Модель для ваших деталей (обученная)
-            self.model = YOLO("runs/train/defect_model/weights/best.pt") 
+            self.model = YOLO("runs/detect/defect_model/weights/best.pt") 
             # 2. Модель для поиска людей (стандартная)
             self.human_model = YOLO("yolov8n.pt")
             print("Модели YOLO успешно загружены!")
