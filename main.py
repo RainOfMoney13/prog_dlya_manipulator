@@ -205,8 +205,16 @@ class Arm165App(QMainWindow):
         self.robot.pause()
         self.write_log("Пауза")
         self.update_leds('pause')
+        # Если работает автосортировка (Модуль Б или Г), мы НЕ выключаем её полностью, 
+        # а просто ставим на паузу, чтобы оператор мог продолжить.
+        if self.is_auto_running:
+            self.is_auto_running = False # Останавливаем цикл
+            self.write_log("Программа автосортировки приостановлена")
         if self.full_auto_active:
-            self.stop_full_auto("Пауза оператором")
+            # Не вызываем stop_full_auto, а просто останавливаем таймер и меняем статус
+            self.timeout_timer.stop()
+            self.label_wait_obj.setText("Статус ИИ: ПАУЗА")
+            self.label_wait_obj.setStyleSheet("background-color: yellow; color: black;")
 
     def emergency_stop(self):
         if not self.robot.connected: return
@@ -312,8 +320,6 @@ class Arm165App(QMainWindow):
             # Здесь нужно собрать все 6 значений и отправить в API
         self.update_leds('work')
         QTimer.singleShot(1000, lambda: self.update_leds('wait') if self.is_manual_mode else None)
-        
-        
         
         
     def update_leds(self, status):
@@ -607,7 +613,7 @@ class Arm165App(QMainWindow):
 
     def toggle_full_auto(self):
         # Если автосортировка НЕ активна - включаем
-        if not self.full_auto_active:
+        if not self.full_auto_active and not self.is_auto_running:
             if not self.robot.connected:
                 QMessageBox.warning(self, "Ошибка", "Сначала включите робота!")
                 return
