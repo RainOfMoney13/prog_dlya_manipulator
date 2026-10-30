@@ -646,21 +646,24 @@ class Arm165App(QMainWindow):
         except Exception:
             # Любая ошибка отрисовки не должна ломать сессию.
             pass
+        
 
     def start_extra_cameras(self):
-        """Запуск камер 1 и 2 (индексы 1 и 2). Если камеры нет — просто не будет видео."""
-        # Камера 2
         if self.camera2_thread is not None or self.camera3_thread is not None:
             return
-        
+
+        # --- Запуск КАМЕРЫ 2 (индекс 1) ---
         self.camera2_label = self._make_camera_label(self.camera_2)
         self.camera2_thread = SimpleCameraThread(1)
         self.camera2_thread.frame_ready.connect(
             lambda img: self._update_simple_frame(img, self.camera2_label)
         )
         self.camera2_thread.start()
+        
+        import time
+        time.sleep(1.0)
 
-        # Камера 3
+        # --- Запуск КАМЕРЫ 3 (индекс 2) ---
         self.camera3_label = self._make_camera_label(self.camera_3)
         self.camera3_thread = SimpleCameraThread(2)
         self.camera3_thread.frame_ready.connect(
@@ -668,7 +671,7 @@ class Arm165App(QMainWindow):
         )
         self.camera3_thread.start()
         
-
+        
     def stop_extra_cameras(self):
         for attr in ("camera2_thread", "camera3_thread"):
             th = getattr(self, attr, None)
