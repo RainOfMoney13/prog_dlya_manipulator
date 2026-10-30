@@ -11,7 +11,8 @@ from openpyxl.styles import Font
 
 from config import UI_FILE
 from robot_api_real import RobotARM165
-from camera_module import VideoThread 
+from camera_module import VideoThread
+from simple_camera_thread import SimpleCameraThread
 import time
 
 class Arm165App(QMainWindow):
@@ -33,6 +34,10 @@ class Arm165App(QMainWindow):
         self.video_thread = None
         self.detection_active = False
         self.camera_label = None
+        self.camera2_thread = None
+        self.camera2_label = None
+        self.camera3_thread = None
+        self.camera3_label = None
         
         # --- Состояния для Модуля Г ---
         self.full_auto_active = False
@@ -561,11 +566,13 @@ class Arm165App(QMainWindow):
             self.video_thread.change_pixmap_signal.connect(self.update_image)
             self.video_thread.start()
             self.write_log("Детекция включена")
+            self.start_extra_cameras()
         else:
             if self.full_auto_active:
                 self.stop_full_auto("Отключение детекции камеры")
             self.detection_active = False
             self.btn_start_detection.setText("Начать детекцию")
+            self.stop_extra_cameras()
             if self.video_thread:
                 self.video_thread.stop()
                 self.video_thread = None
@@ -608,6 +615,84 @@ class Arm165App(QMainWindow):
                 self.process_full_auto_object(detected_classes[0])
             else:
                 pass # Игнорируем повторное считывание
+            
+            
+    # ================= ДОПОЛНИТЕЛЬНЫЕ КАМЕРЫ =================
+
+    def _make_camera_label(self, frame_widget):
+        """Создаёт QLabel внутри QFrame и возвращает его."""
+        layout = QVBoxLayout(frame_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        label = QLabel()
+        label.setAlignment(Qt.AlignCenter)
+        label.setScaledContents(True)
+        layout.addWidget(label)
+        return label
+
+    def _update_simple_frame(self, cv_img, label):
+        """Отрисовка кадра в QLabel (без какой-либо логики детекции)."""
+        if label is None or cv_img is None:
+            return
+        try:
+            rgb = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb.shape
+            bytes_per_line = ch * w
+            qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            pix = QPixmap.fromImage(qimg).scaled(
+                label.width(), label.height(),
+                Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            label.setPixmap(pix)
+        except Exception:
+            # Любая ошибка отрисовки не должна ломать сессию.
+            pass
+
+    def start_extra_cameras(self):
+        """Запуск камер 1 и 2 (индексы 1 и 2). Если камеры нет — просто не будет видео."""
+        # Камера 2
+        if self.camera2_thread is not None or self.camera3_thread is not None:
+            return
+        
+        self.camera2_label = self._make_camera_label(self.camera_2)
+        self.camera2_thread = SimpleCameraThread(1)
+        self.camera2_thread.frame_ready.connect(
+            lambda img: self._update_simple_frame(img, self.camera2_label)
+        )
+        self.camera2_thread.start()
+
+        # Камера 3
+        self.camera3_label = self._make_camera_label(self.camera_3)
+        self.camera3_thread = SimpleCameraThread(2)
+        self.camera3_thread.frame_ready.connect(
+            lambda img: self._update_simple_frame(img, self.camera3_label)
+        )
+        self.camera3_thread.start()
+        
+
+    def stop_extra_cameras(self):
+        for attr in ("camera2_thread", "camera3_thread"):
+            th = getattr(self, attr, None)
+            if th is not None:
+                try:
+                    th.stop()
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+        for lbl_attr in ("camera2_label", "camera3_label"):
+            lbl = getattr(self, lbl_attr, None)
+            if lbl is not None:
+                lbl.clear()
+
+    def closeEvent(self, event):
+        """Аккуратно гасим все потоки при закрытии окна."""
+        if self.video_thread:
+            try:
+                self.video_thread.stop()
+            except Exception:
+                pass
+            self.video_thread = None
+        self.stop_extra_cameras()
+        super().closeEvent(event)
 
     # ================= МОДУЛЬ Г: ЛОГИКА =================
 
